@@ -31,7 +31,9 @@ def register(request):
                 password=password,
                 first_name=full_name,
             )
-            # Optionally, save phone and user_role in a profile model
+            # Optionally, save phone and user_role in a profile model or as user.last_name
+            user.last_name = user_role  # Store user_role in last_name for demo
+            user.save()
             return JsonResponse({'message': 'Registration successful!'}, status=201)
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
@@ -49,14 +51,12 @@ def login_view(request):
             user = authenticate(username=email, password=password)
             if user is not None:
                 # Determine role
-                if user.username == 'admin@admin.com':
+                if user.username == 'admin@gmail.com':
                     role = 'Admin'
+                elif (user.last_name or '').lower() == 'volunteer' or 'volunteer' in (user.first_name or '').lower():
+                    role = 'Volunteer'
                 else:
-                    # For demo, treat users with first_name containing 'Volunteer' as volunteers
-                    if 'volunteer' in (user.first_name or '').lower():
-                        role = 'Volunteer'
-                    else:
-                        role = 'User'
+                    role = 'User'
                 return JsonResponse({'message': 'Login successful!', 'role': role}, status=200)
             else:
                 return JsonResponse({'error': 'Invalid credentials.'}, status=401)
