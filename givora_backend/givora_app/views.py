@@ -2,7 +2,7 @@ from django.shortcuts import render
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.models import User
-from django.contrib.auth import authenticate
+from django.contrib.auth import authenticate, logout
 import json
 
 # Create your views here.
@@ -62,4 +62,11 @@ def login_view(request):
                 return JsonResponse({'error': 'Invalid credentials.'}, status=401)
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
+    return JsonResponse({'error': 'Invalid request method.'}, status=405)
+
+@csrf_exempt
+def logout_view(request):
+    if request.method == 'POST':
+        logout(request)
+        return JsonResponse({'message': 'Logged out successfully.'}, status=200)
     return JsonResponse({'error': 'Invalid request method.'}, status=405)
