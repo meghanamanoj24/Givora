@@ -167,20 +167,45 @@ def verify_payment(request):
     razorpay_order_id = data.get('razorpay_order_id')
     razorpay_payment_id = data.get('razorpay_payment_id')
     razorpay_signature = data.get('razorpay_signature')
+    
+    if not all([razorpay_order_id, razorpay_payment_id, razorpay_signature]):
+        return Response({'error': 'Missing payment verification data'}, 
+                       status=status.HTTP_400_BAD_REQUEST)
+
     try:
         money_donation = MoneyDonation.objects.get(razorpay_order_id=razorpay_order_id)
+        
+        # Verify payment with Razorpay
         client = razorpay.Client(auth=(settings.RAZOR_KEY_ID, settings.RAZOR_KEY_SECRET))
-        params_dict = {
+        params = {
             'razorpay_order_id': razorpay_order_id,
             'razorpay_payment_id': razorpay_payment_id,
             'razorpay_signature': razorpay_signature
         }
-        client.utility.verify_payment_signature(params_dict)
+        
+        try:
+            client.utility.verify_payment_signature(params)
+        except razorpay.errors.SignatureVerificationError as e:
+            return Response({'error': 'Invalid payment signature'}, 
+                           status=status.HTTP_400_BAD_REQUEST)
+        
+        # Update donation status
         money_donation.razorpay_payment_id = razorpay_payment_id
         money_donation.payment_status = 'paid'
         money_donation.save()
+        
         money_donation.donation.status = 'completed'
         money_donation.donation.save()
-        return Response({'message': 'Payment verified and donation completed.'}, status=status.HTTP_200_OK)
+        
+        return Response({
+            'message': 'Payment verified successfully',
+            'donation_id': money_donation.donation.id,
+            'amount': money_donation.amount
+        }, status=status.HTTP_200_OK)
+        
+    except MoneyDonation.DoesNotExist:
+        return Response({'error': 'Donation not found'}, 
+                       status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
-        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': str(e)}, 
+                       status=status.HTTP_500_INTERNAL_SERVER_ERROR)
