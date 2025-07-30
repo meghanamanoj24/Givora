@@ -15,6 +15,21 @@ from rest_framework.exceptions import PermissionDenied
 
 # Create your views here.
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def user_role(request):
+    user = request.user
+    if user.is_authenticated:
+        # Determine role based on the same logic as in login_view
+        if user.username == 'admin@gmail.com':
+            role = 'Admin'
+        elif (user.last_name or '').lower() == 'volunteer' or 'volunteer' in (user.first_name or '').lower():
+            role = 'Volunteer'
+        else:
+            role = 'User'
+        return Response({'role': role}, status=status.HTTP_200_OK)
+    return Response({'error': 'Not authenticated'}, status=status.HTTP_401_UNAUTHORIZED)
+
 @csrf_exempt
 def register(request):
     if request.method == 'POST':
