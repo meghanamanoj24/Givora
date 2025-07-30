@@ -20,13 +20,11 @@ from rest_framework.exceptions import PermissionDenied
 def user_role(request):
     user = request.user
     if user.is_authenticated:
-        # Determine role based on the same logic as in login_view
-        if user.username == 'admin@gmail.com':
+        # Get role from user model
+        role = user.role
+        # For admin users
+        if user.email == 'admin@gmail.com' or user.is_superuser:
             role = 'Admin'
-        elif (user.last_name or '').lower() == 'volunteer' or 'volunteer' in (user.first_name or '').lower():
-            role = 'Volunteer'
-        else:
-            role = 'User'
         return Response({'role': role}, status=status.HTTP_200_OK)
     return Response({'error': 'Not authenticated'}, status=status.HTTP_401_UNAUTHORIZED)
 
@@ -90,13 +88,11 @@ def login_view(request):
             user = authenticate(username=email, password=password)
             if user is not None:
                 login(request, user)  # Use Django session login
-                # Determine role
-                if user.username == 'admin@gmail.com':
+                # Get role from user model
+                role = user.role
+                # For admin users
+                if user.email == 'admin@gmail.com' or user.is_superuser:
                     role = 'Admin'
-                elif (user.last_name or '').lower() == 'volunteer' or 'volunteer' in (user.first_name or '').lower():
-                    role = 'Volunteer'
-                else:
-                    role = 'User'
                 return JsonResponse({'message': 'Login successful!', 'role': role}, status=200)
             else:
                 return JsonResponse({'error': 'Invalid credentials.'}, status=401)
