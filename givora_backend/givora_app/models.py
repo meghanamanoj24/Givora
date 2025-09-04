@@ -65,6 +65,8 @@ class Donation(models.Model):
         ('money', 'Money'),
         ('items', 'Items'),
         ('food', 'Food'),
+        ('grocery', 'Grocery'),
+        ('medicine', 'Medicine'),
     ]
     STATUS_CHOICES = [
         ('pending', 'Pending'),
@@ -111,3 +113,50 @@ class FoodDonation(models.Model):
 
     def __str__(self):
         return f"FoodDonation: {self.food_type} for {self.target_group}"
+
+class GroceryDonation(models.Model):
+    donation = models.OneToOneField(Donation, on_delete=models.CASCADE, related_name='grocery_details')
+    grocery_type = models.CharField(max_length=100)
+    target_group = models.CharField(max_length=100)
+    stock = models.PositiveIntegerField()
+    address = models.TextField()
+
+    def __str__(self):
+        return f"GroceryDonation: {self.grocery_type} for {self.target_group}"
+
+class MedicineDonation(models.Model):
+    donation = models.OneToOneField(Donation, on_delete=models.CASCADE, related_name='medicine_details')
+    medicine_type = models.CharField(max_length=100)
+    target_group = models.CharField(max_length=100)
+    stock = models.PositiveIntegerField()
+    address = models.TextField()
+
+    def __str__(self):
+        return f"MedicineDonation: {self.medicine_type} for {self.target_group}"
+
+
+class Orphanage(models.Model):
+    name = models.CharField(max_length=200)
+    registration_number = models.CharField(max_length=100, blank=True, null=True)
+    email = models.EmailField(blank=True, null=True)
+    phone_number = models.CharField(max_length=20, blank=True, null=True)
+    website = models.URLField(blank=True, null=True)
+    address = models.TextField()
+    city = models.CharField(max_length=100, blank=True, null=True)
+    state = models.CharField(max_length=100, blank=True, null=True)
+    country = models.CharField(max_length=100, blank=True, null=True)
+    capacity = models.PositiveIntegerField(default=0)
+    current_children_count = models.PositiveIntegerField(default=0)
+    primary_needs = models.TextField(blank=True, null=True)
+    description = models.TextField(blank=True, null=True)
+    image = models.ImageField(upload_to='orphanages/', blank=True, null=True)
+    added_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='orphanages_added')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'orphanage'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Orphanage: {self.name}"

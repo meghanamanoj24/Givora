@@ -4,17 +4,18 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate, logout, login
 import json
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, parser_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from django.conf import settings
-from .models import Donation, MoneyDonation, ItemDonation, FoodDonation, User
+from .models import Donation, MoneyDonation, ItemDonation, FoodDonation, GroceryDonation, MedicineDonation, User, Orphanage
 import razorpay
 from rest_framework.exceptions import PermissionDenied
 from django.forms.models import model_to_dict
 from django.db.models import Sum, Count
 from rest_framework.authtoken.models import Token
+from rest_framework.parsers import MultiPartParser, FormParser
 
 # Create your views here.
 
@@ -391,6 +392,24 @@ def create_donation(request):
         donation.status = 'completed'
         donation.save()
         return Response({'message': 'Food donation recorded.'}, status=status.HTTP_201_CREATED)
+    elif donation_type == 'grocery':
+        grocery_type = data.get('grocery_type')
+        target_group = data.get('target_group')
+        stock = data.get('stock')
+        address = data.get('address')
+        GroceryDonation.objects.create(donation=donation, grocery_type=grocery_type, target_group=target_group, stock=stock, address=address)
+        donation.status = 'completed'
+        donation.save()
+        return Response({'message': 'Grocery donation recorded.'}, status=status.HTTP_201_CREATED)
+    elif donation_type == 'medicine':
+        medicine_type = data.get('medicine_type')
+        target_group = data.get('target_group')
+        stock = data.get('stock')
+        address = data.get('address')
+        MedicineDonation.objects.create(donation=donation, medicine_type=medicine_type, target_group=target_group, stock=stock, address=address)
+        donation.status = 'completed'
+        donation.save()
+        return Response({'message': 'Medicine donation recorded.'}, status=status.HTTP_201_CREATED)
     else:
         return Response({'error': 'Invalid donation type.'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -496,6 +515,28 @@ def user_donations(request):
                     }
                 except FoodDonation.DoesNotExist:
                     pass
+            elif donation.donation_type == 'grocery':
+                try:
+                    grocery = GroceryDonation.objects.get(donation=donation)
+                    donation_data['details'] = {
+                        'grocery_type': grocery.grocery_type,
+                        'target_group': grocery.target_group,
+                        'stock': grocery.stock,
+                        'address': grocery.address
+                    }
+                except GroceryDonation.DoesNotExist:
+                    pass
+            elif donation.donation_type == 'medicine':
+                try:
+                    medicine = MedicineDonation.objects.get(donation=donation)
+                    donation_data['details'] = {
+                        'medicine_type': medicine.medicine_type,
+                        'target_group': medicine.target_group,
+                        'stock': medicine.stock,
+                        'address': medicine.address
+                    }
+                except MedicineDonation.DoesNotExist:
+                    pass
                     
             donation_list.append(donation_data)
             
@@ -560,9 +601,192 @@ def get_donation_by_id(request, donation_id):
                 }
             except FoodDonation.DoesNotExist:
                 pass
+        elif donation.donation_type == 'grocery':
+            try:
+                grocery = GroceryDonation.objects.get(donation=donation)
+                donation_data['details'] = {
+                    'grocery_type': grocery.grocery_type,
+                    'target_group': grocery.target_group,
+                    'stock': grocery.stock,
+                    'address': grocery.address
+                }
+            except GroceryDonation.DoesNotExist:
+                pass
+        elif donation.donation_type == 'medicine':
+            try:
+                medicine = MedicineDonation.objects.get(donation=donation)
+                donation_data['details'] = {
+                    'medicine_type': medicine.medicine_type,
+                    'target_group': medicine.target_group,
+                    'stock': medicine.stock,
+                    'address': medicine.address
+                }
+            except MedicineDonation.DoesNotExist:
+                pass
                 
         return Response(donation_data, status=status.HTTP_200_OK)
     except Donation.DoesNotExist:
         return Response({'error': 'Donation not found'}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ------------------ Orphanage CRUD (Admin-only) ------------------
+
+def _require_admin(user):
+    if not user.is_authenticated:
+        raise PermissionDenied('Not authenticated')
+    if not (user.is_superuser or user.email == 'admin@gmail.com' or user.role == 'Admin'):
+        raise PermissionDenied('Admin privileges required')
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def orphanage_list(request):
+    _require_admin(request.user)
+    qs = Orphanage.objects.all().order_by('-created_at')
+    data = [
+        {
+            'id': o.id,
+            'name': o.name,
+            'registration_number': o.registration_number,
+            'email': o.email,
+            'phone_number': o.phone_number,
+            'website': o.website,
+            'address': o.address,
+            'city': o.city,
+            'state': o.state,
+            'country': o.country,
+            'capacity': o.capacity,
+            'current_children_count': o.current_children_count,
+            'primary_needs': o.primary_needs,
+            'description': o.description,
+            'image': o.image.url if o.image else None,
+            'created_at': o.created_at,
+            'updated_at': o.updated_at,
+        }
+        for o in qs
+    ]
+    return Response(data, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+def orphanage_public_list(request):
+    """Public orphanage list for donors to select from (no auth required)."""
+    qs = Orphanage.objects.all().order_by('-created_at')
+    data = [
+        {
+            'id': o.id,
+            'name': o.name,
+            'city': o.city,
+            'state': o.state,
+            'country': o.country,
+            'image': o.image.url if o.image else None,
+            'capacity': o.capacity,
+            'current_children_count': o.current_children_count,
+        }
+        for o in qs
+    ]
+    return Response(data, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@parser_classes([MultiPartParser, FormParser])
+def orphanage_create(request):
+    _require_admin(request.user)
+    parser_classes = (MultiPartParser, FormParser)
+    data = request.data
+
+    orphanage = Orphanage(
+        name=data.get('name', '').strip(),
+        registration_number=data.get('registration_number') or None,
+        email=data.get('email') or None,
+        phone_number=data.get('phone_number') or None,
+        website=data.get('website') or None,
+        address=data.get('address', '').strip(),
+        city=data.get('city') or None,
+        state=data.get('state') or None,
+        country=data.get('country') or None,
+        capacity=int(data.get('capacity') or 0),
+        current_children_count=int(data.get('current_children_count') or 0),
+        primary_needs=data.get('primary_needs') or None,
+        description=data.get('description') or None,
+        added_by=request.user,
+    )
+    if 'image' in request.FILES:
+        orphanage.image = request.FILES['image']
+
+    if not orphanage.name or not orphanage.address:
+        return Response({'error': 'name and address are required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    orphanage.save()
+    return Response({'message': 'Orphanage created', 'id': orphanage.id}, status=status.HTTP_201_CREATED)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def orphanage_detail(request, orphanage_id):
+    _require_admin(request.user)
+    try:
+        o = Orphanage.objects.get(id=orphanage_id)
+        data = {
+            'id': o.id,
+            'name': o.name,
+            'registration_number': o.registration_number,
+            'email': o.email,
+            'phone_number': o.phone_number,
+            'website': o.website,
+            'address': o.address,
+            'city': o.city,
+            'state': o.state,
+            'country': o.country,
+            'capacity': o.capacity,
+            'current_children_count': o.current_children_count,
+            'primary_needs': o.primary_needs,
+            'description': o.description,
+            'image': o.image.url if o.image else None,
+            'created_at': o.created_at,
+            'updated_at': o.updated_at,
+        }
+        return Response(data, status=status.HTTP_200_OK)
+    except Orphanage.DoesNotExist:
+        return Response({'error': 'Orphanage not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(['PUT', 'PATCH'])
+@permission_classes([IsAuthenticated])
+@parser_classes([MultiPartParser, FormParser])
+def orphanage_update(request, orphanage_id):
+    _require_admin(request.user)
+    try:
+        o = Orphanage.objects.get(id=orphanage_id)
+        data = request.data
+        for field in [
+            'name','registration_number','email','phone_number','website','address','city','state','country',
+            'primary_needs','description'
+        ]:
+            if field in data:
+                setattr(o, field, data.get(field))
+        if 'capacity' in data:
+            o.capacity = int(data.get('capacity') or 0)
+        if 'current_children_count' in data:
+            o.current_children_count = int(data.get('current_children_count') or 0)
+        if 'image' in request.FILES:
+            o.image = request.FILES['image']
+        o.save()
+        return Response({'message': 'Orphanage updated'}, status=status.HTTP_200_OK)
+    except Orphanage.DoesNotExist:
+        return Response({'error': 'Orphanage not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def orphanage_delete(request, orphanage_id):
+    _require_admin(request.user)
+    try:
+        o = Orphanage.objects.get(id=orphanage_id)
+        o.delete()
+        return Response({'message': 'Orphanage deleted'}, status=status.HTTP_200_OK)
+    except Orphanage.DoesNotExist:
+        return Response({'error': 'Orphanage not found'}, status=status.HTTP_404_NOT_FOUND)
